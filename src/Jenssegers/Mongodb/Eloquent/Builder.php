@@ -3,6 +3,8 @@
 namespace Jenssegers\Mongodb\Eloquent;
 
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Str;
 use Jenssegers\Mongodb\Helpers\QueriesRelationships;
 use MongoDB\Driver\Cursor;
 use MongoDB\Model\BSONDocument;
@@ -77,6 +79,28 @@ class Builder extends EloquentBuilder
         }
 
         return parent::insertGetId($values, $sequence);
+    }
+
+    /**
+     * Add the "updated at" column to an array of values.
+     *
+     * @param  array  $values
+     * @return array
+     */
+    protected function addUpdatedAtColumn(array $values)
+    {
+        if (! $this->model->usesTimestamps()) {
+            return $values;
+        }
+
+        if (!Str::startsWith(key($values), '$')) {
+            $values = ['$set' => $values];
+        }
+
+        return Arr::add(
+            $values, '$set.'.$this->model->getUpdatedAtColumn(),
+            $this->model->freshTimestampString()
+        );
     }
 
     /**

@@ -271,6 +271,90 @@ abstract class Model extends BaseModel
     }
 
     /**
+     * Unset one of more attribute.
+     *
+     * @param string|array $columns
+     * @return $this
+     */
+    public function unsetAttribute($columns)
+    {
+        $columns = Arr::wrap($columns);
+        foreach ($columns as $column) {
+            unset($this->attributes[$column]);
+        }
+
+        return $this;
+    }
+
+    /**
+     * Rename an attribute.
+     *
+     * @param string $oldName
+     * @param string $newName
+     * @return $this
+     */
+    public function renameAttribute($oldName, $newName)
+    {
+        $this->attributes[$newName] = $this->attributes[$oldName];
+        unset($this->attributes[$oldName]);
+
+        return $this;
+    }
+
+    public function getUnsetFields()
+    {
+        $unset = [];
+        foreach ($this->original as $key => $value) {
+            if (! array_key_exists($key, $this->attributes)) {
+                $unset[] = $key;
+            }
+        }
+
+        return $unset;
+    }
+
+    protected function performUpdate(\Illuminate\Database\Eloquent\Builder $query)
+    {
+        // If the updating event returns false, we will cancel the update operation so
+        // developers can hook Validation systems into their models and cancel this
+        // operation if the model does not pass validation. Otherwise, we update.
+        if ($this->fireModelEvent('updating') === false) {
+            return false;
+        }
+
+        // First we need to create a fresh query instance and touch the creation and
+        // update timestamp on the model which are maintained by us for developer
+        // convenience. Then we will just continue saving the model instances.
+        if ($this->usesTimestamps()) {
+            $this->updateTimestamps();
+        }
+
+        $dirty = $this->getDirty();
+        $unset = $this->getUnsetFields();
+
+        $update = [];
+        if (count($dirty) > 0) {
+            $update['$set'] = $dirty;
+        }
+        if (count($unset) > 0) {
+            $update['$unset'] = array_flip($unset);
+        }
+
+        // Once we have run the update operation, we will fire the "updated" event for
+        // this model instance. This will allow developers to hook into these after
+        // models are updated, giving them a chance to do any special processing.
+        if (count($update) > 0) {
+            $this->setKeysForSaveQuery($query)->update($update);
+
+            $this->fireModelEvent('updated', false);
+
+            $this->syncChanges();
+        }
+
+        return true;
+    }
+
+    /**
      * @inheritdoc
      */
     public function push()
